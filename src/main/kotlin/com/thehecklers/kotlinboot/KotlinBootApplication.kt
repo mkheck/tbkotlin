@@ -7,12 +7,16 @@ import org.springframework.context.annotation.Bean
 import org.springframework.data.annotation.Id
 import org.springframework.data.mongodb.core.mapping.Document
 import org.springframework.data.repository.CrudRepository
+import org.springframework.http.MediaType
 import org.springframework.stereotype.Service
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
 import org.springframework.web.bind.annotation.RestController
 import org.springframework.web.reactive.function.client.WebClient
+import org.springframework.web.reactive.function.client.awaitBody
 import org.springframework.web.reactive.function.client.bodyToMono
+import reactor.core.publisher.Flux
+import java.time.Duration
 import java.util.List
 
 @SpringBootApplication
@@ -49,8 +53,8 @@ class MetarController(private val service: WxService) {
     @GetMapping("/{id}")
     fun getAirportById(@PathVariable id: String) = service.getAirportById(id)
 
-    @GetMapping("/metar/{id}")
-    fun getMetarForAirport(@PathVariable id: String): METAR? = service.getMetarForAirportById(id)
+    @GetMapping("/metar/{id}", produces = [MediaType.TEXT_EVENT_STREAM_VALUE])
+    fun getMetarForAirport(@PathVariable id: String): Flux<METAR> = service.getMetarsForAirportById(id)
 }
 
 @Service
@@ -59,11 +63,13 @@ class WxService(private val repo: AirportRepository, private val client: WebClie
 
     fun getAirportById(id: String) = repo.findById(id)
 
-    fun getMetarForAirportById(id: String) = client.get()
-            .uri("?loc=$id")
-            .retrieve()
-            .bodyToMono<METAR>()
-            .block()
+    fun getMetarsForAirportById(id: String) = Flux.interval(Duration.ofSeconds(1))
+        .flatMap {
+            client.get()
+                .uri("?loc=$id")
+                .retrieve()
+                .bodyToMono<METAR>()
+        }
 }
 
 interface AirportRepository : CrudRepository<Airport, String>
